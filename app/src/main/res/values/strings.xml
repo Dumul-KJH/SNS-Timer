@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SNS Timer</string>
+    <string name="permission_overlay_title">다른 앱 위에 표시</string>
+    <string name="permission_overlay_body">SNS 앱 화면 위에 반투명 타이머를 그리려면 필요합니다.</string>
+    <string name="permission_usage_title">사용 정보 접근</string>
+    <string name="permission_usage_body">지금 어떤 앱이 켜져 있는지 확인하고 사용 시간을 측정하려면 필요합니다.</string>
+    <string name="permission_granted">허용됨</string>
+    <string name="permission_required">필요함</string>
+    <string name="open_settings">설정으로 이동</string>
+    <string name="all_permissions_ready">필수 권한이 모두 허용되었습니다. 타이머를 띄울 앱을 선택한 뒤 모니터링을 시작하세요.</string>
+    <string name="grant_permissions_hint">타이머를 시작하려면 아래 두 권한을 모두 허용해 주세요.</string>
+    <string name="overlay_notification_channel">타이머 모니터링</string>
+    <string name="overlay_notification_title">SNS Timer 실행 중</string>
+    <string name="overlay_notification_text">선택한 앱 사용 시간을 측정합니다.</string>
+    <string name="overlay_timer_content_description">사용 시간 타이머</string>
+    <string name="target_apps_title">타이머를 띄울 앱</string>
+    <string name="target_apps_body">선택한 앱이 화면에 있을 때 타이머가 표시됩니다.</string>
+    <string name="target_apps_empty">설치된 앱을 불러오는 중…</string>
+    <string name="target_apps_none_selected">앱을 하나 이상 선택해 주세요.</string>
+    <string name="selected_count">%d개 선택됨</string>
+    <string name="selected_apps_label">선택된 앱 (눌러서 해제)</string>
+    <string name="remove_selected_app">%1$s 선택 해제</string>
+    <string name="timer_tab">타이머</string>
+    <string name="analytics_tab">사용 분석</string>
+    <string name="analytics_date">%1$s 사용 기록</string>
+    <string name="analytics_today">오늘 사용 시간</string>
+    <string name="analytics_week_total">최근 7일 합계</string>
+    <string name="analytics_week_average">최근 7일 일평균</string>
+    <string name="analytics_month_total">최근 30일 합계</string>
+    <string name="analytics_month_average">최근 30일 일평균</string>
+    <string name="analytics_app_breakdown">선택 앱별 사용량</string>
+    <string name="analytics_sort_note">오늘 사용 시간이 많은 앱부터 표시합니다.</string>
+    <string name="analytics_no_apps">분석할 앱을 먼저 선택해 주세요.</string>
+    <string name="analytics_apps_loading">앱 목록을 불러오는 중입니다.</string>
+    <string name="analytics_period_note">평균은 최근 7일과 30일의 달력 날짜를 기준으로 계산합니다. 모니터링이 켜져 있는 동안의 사용량이 기록됩니다.</string>
+    <string name="analytics_today_short">오늘</string>
+    <string name="analytics_week_average_short">주 평균</string>
+    <string name="analytics_month_average_short">월 평균</string>
+    <string name="search_apps">앱 검색</string>
+    <string name="start_monitoring">모니터링 시작</string>
+    <string name="stop_monitoring">모니터링 중지</string>
+    <string name="monitoring_active">모니터링 중 — 선택한 앱을 열면 타이머가 나타납니다.</string>
+    <string name="monitoring_inactive">모니터링이 꺼져 있습니다.</string>
+    <string name="notification_permission_hint">알림 권한이 없으면 백그라운드 모니터링이 제한될 수 있습니다.</string>
+</resources>
