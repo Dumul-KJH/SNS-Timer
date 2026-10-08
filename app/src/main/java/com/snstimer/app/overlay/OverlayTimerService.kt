@@ -15,19 +15,21 @@ import androidx.core.content.ContextCompat
 import com.snstimer.app.MainActivity
 import com.snstimer.app.R
 import com.snstimer.app.data.DailyUsageStore
+import com.snstimer.app.data.OverlayAppearanceStore
 import com.snstimer.app.data.TargetAppsStore
 import com.snstimer.app.permission.PermissionChecker
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Foreground service that polls the current app and shows a usage timer overlay
- * while a user-selected target app is in the foreground.
+ * while a user-selected target app is visible, including in picture-in-picture mode.
  */
 class OverlayTimerService : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var targetAppsStore: TargetAppsStore
     private lateinit var dailyUsageStore: DailyUsageStore
+    private lateinit var appearanceStore: OverlayAppearanceStore
     private lateinit var foregroundDetector: ForegroundAppDetector
     private lateinit var overlayController: OverlayWindowController
 
@@ -47,6 +49,7 @@ class OverlayTimerService : Service() {
         super.onCreate()
         targetAppsStore = TargetAppsStore(this)
         dailyUsageStore = DailyUsageStore(this)
+        appearanceStore = OverlayAppearanceStore(this)
         foregroundDetector = ForegroundAppDetector(this)
         overlayController = OverlayWindowController(this)
         createNotificationChannel()
@@ -77,8 +80,8 @@ class OverlayTimerService : Service() {
             return
         }
 
-        val foreground = foregroundDetector.currentForegroundPackage()
         val targets = targetAppsStore.getSelectedPackages()
+        val foreground = foregroundDetector.currentVisibleTargetPackage(targets)
 
         if (foreground == null ||
             foreground == packageName ||
@@ -89,10 +92,11 @@ class OverlayTimerService : Service() {
         }
 
         val now = System.currentTimeMillis()
+        val appearance = appearanceStore.getSettings()
         if (activePackage != foreground) {
             activePackage = foreground
             lastTickAtMs = now
-            overlayController.show()
+            overlayController.show(appearance)
         } else {
             val intervalStart = lastTickAtMs
             val elapsedMs = (now - intervalStart).coerceIn(0L, MAX_COUNTED_INTERVAL_MS)
@@ -102,7 +106,10 @@ class OverlayTimerService : Service() {
             lastTickAtMs = now
         }
 
-        overlayController.updateElapsed(dailyUsageStore.getTodayUsage(foreground, now))
+        overlayController.updateElapsed(
+            dailyUsageStore.getTodayUsage(foreground, now),
+            appearance,
+        )
     }
 
     private fun hideSession() {

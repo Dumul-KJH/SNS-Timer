@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.keyframes
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -11,6 +13,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -26,6 +30,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,12 +49,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -61,12 +70,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.Lifecycle
@@ -74,8 +87,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.snstimer.app.data.DailyUsageReport
 import com.snstimer.app.data.DailyUsageStore
+import com.snstimer.app.data.AttentionEffectType
 import com.snstimer.app.data.InstalledApp
 import com.snstimer.app.data.InstalledAppsRepository
+import com.snstimer.app.data.OverlayAppearanceSettings
+import com.snstimer.app.data.OverlayAppearanceStore
 import com.snstimer.app.data.TargetAppsStore
 import com.snstimer.app.overlay.OverlayTimerService
 import com.snstimer.app.permission.PermissionChecker
@@ -86,6 +102,7 @@ import kotlinx.coroutines.withContext
 import java.util.Date
 import java.util.Locale
 import java.text.SimpleDateFormat
+import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -106,6 +123,7 @@ private fun SnsTimerScreen() {
     val targetStore = remember { TargetAppsStore(context) }
     val appsRepository = remember { InstalledAppsRepository(context) }
     val dailyUsageStore = remember { DailyUsageStore(context) }
+    val appearanceStore = remember { OverlayAppearanceStore(context) }
 
     var overlayGranted by remember { mutableStateOf(PermissionChecker.canDrawOverlays(context)) }
     var usageGranted by remember { mutableStateOf(PermissionChecker.hasUsageStatsAccess(context)) }
@@ -115,7 +133,9 @@ private fun SnsTimerScreen() {
     var appsLoading by remember { mutableStateOf(true) }
     var searchQuery by remember { mutableStateOf("") }
     var selectedTab by remember { mutableStateOf(0) }
+    var showAppearanceSettings by remember { mutableStateOf(false) }
     var statsRefresh by remember { mutableStateOf(0) }
+    var appearance by remember { mutableStateOf(appearanceStore.getSettings()) }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -179,6 +199,17 @@ private fun SnsTimerScreen() {
     fun togglePackage(packageName: String, selected: Boolean) {
         targetStore.setSelected(packageName, selected)
         selectedPackages = targetStore.getSelectedPackages()
+    }
+
+    fun selectAllApps(selected: Boolean) {
+        val packages = if (selected) installedApps.map { it.packageName }.toSet() else emptySet()
+        targetStore.setSelectedPackages(packages)
+        selectedPackages = targetStore.getSelectedPackages()
+    }
+
+    fun updateAppearance(settings: OverlayAppearanceSettings) {
+        appearance = settings
+        appearanceStore.saveSettings(settings)
     }
 
     fun ensureNotificationPermission() {
@@ -289,47 +320,75 @@ private fun SnsTimerScreen() {
                 )
                 Tab(
                     selected = selectedTab == ANALYTICS_TAB,
-                    onClick = { selectedTab = ANALYTICS_TAB },
+                    onClick = {
+                        selectedTab = ANALYTICS_TAB
+                        showAppearanceSettings = false
+                    },
                     text = { Text(stringResource(R.string.analytics_tab)) },
                 )
             }
             Spacer(modifier = Modifier.height(16.dp))
 
             if (selectedTab == TIMER_TAB) {
-                PermissionCard(
-                    icon = Icons.Outlined.Layers,
-                    title = stringResource(R.string.permission_overlay_title),
-                    body = stringResource(R.string.permission_overlay_body),
-                    granted = overlayGranted,
-                    onOpenSettings = {
-                        context.startActivity(PermissionChecker.overlaySettingsIntent(context))
-                    },
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                PermissionCard(
-                    icon = Icons.Outlined.QueryStats,
-                    title = stringResource(R.string.permission_usage_title),
-                    body = stringResource(R.string.permission_usage_body),
-                    granted = usageGranted,
-                    onOpenSettings = {
-                        context.startActivity(PermissionChecker.usageAccessSettingsIntent())
-                    },
-                )
-
-                if (allGranted) {
-                    Spacer(modifier = Modifier.height(20.dp))
-                    TargetAppsSection(
-                        apps = filteredApps,
-                        selectedApps = selectedApps,
-                        selectedPackages = selectedPackages,
-                        appsLoading = appsLoading,
-                        searchQuery = searchQuery,
-                        onSearchChange = { searchQuery = it },
-                        onToggle = ::togglePackage,
+                if (showAppearanceSettings) {
+                    OutlinedButton(
+                        onClick = { showAppearanceSettings = false },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text(text = stringResource(R.string.back_to_timer_settings))
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OverlayAppearanceSection(
+                        settings = appearance,
+                        onSettingsChange = ::updateAppearance,
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                } else {
+                    PermissionCard(
+                        icon = Icons.Outlined.Layers,
+                        title = stringResource(R.string.permission_overlay_title),
+                        body = stringResource(R.string.permission_overlay_body),
+                        granted = overlayGranted,
+                        onOpenSettings = {
+                            context.startActivity(PermissionChecker.overlaySettingsIntent(context))
+                        },
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    PermissionCard(
+                        icon = Icons.Outlined.QueryStats,
+                        title = stringResource(R.string.permission_usage_title),
+                        body = stringResource(R.string.permission_usage_body),
+                        granted = usageGranted,
+                        onOpenSettings = {
+                            context.startActivity(PermissionChecker.usageAccessSettingsIntent())
+                        },
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = { showAppearanceSettings = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text(text = stringResource(R.string.open_overlay_settings))
+                    }
+
+                    if (allGranted) {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        TargetAppsSection(
+                            apps = filteredApps,
+                            allApps = installedApps,
+                            selectedApps = selectedApps,
+                            selectedPackages = selectedPackages,
+                            appsLoading = appsLoading,
+                            searchQuery = searchQuery,
+                            onSearchChange = { searchQuery = it },
+                            onToggle = ::togglePackage,
+                            onSelectAll = ::selectAllApps,
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
                 }
-            } else {
+            } else if (selectedTab == ANALYTICS_TAB) {
                 UsageAnalyticsSection(
                     report = usageReport,
                     apps = selectedApps,
@@ -339,6 +398,337 @@ private fun SnsTimerScreen() {
         }
     }
 }
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+private fun OverlayAppearanceSection(
+    settings: OverlayAppearanceSettings,
+    onSettingsChange: (OverlayAppearanceSettings) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        OverlayTimerPreview(settings)
+        Text(
+            text = stringResource(R.string.overlay_settings_title),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = stringResource(R.string.overlay_settings_hint),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+        )
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
+                SettingSlider(
+                    title = stringResource(R.string.overlay_time_size),
+                    valueLabel = stringResource(
+                        R.string.overlay_time_size_value,
+                        settings.timeTextSizeSp.roundToInt(),
+                    ),
+                    value = settings.timeTextSizeSp,
+                    valueRange = 14f..32f,
+                    steps = 17,
+                    onValueChange = { onSettingsChange(settings.copy(timeTextSizeSp = it)) },
+                )
+                OverlayColorOptions(
+                    title = stringResource(R.string.overlay_text_color),
+                    selectedColor = settings.textColor,
+                    options = TEXT_COLOR_OPTIONS,
+                    onColorSelected = { onSettingsChange(settings.copy(textColor = it)) },
+                )
+                OverlayColorOptions(
+                    title = stringResource(R.string.overlay_background_color),
+                    selectedColor = settings.backgroundColor,
+                    options = BACKGROUND_COLOR_OPTIONS,
+                    onColorSelected = { onSettingsChange(settings.copy(backgroundColor = it)) },
+                )
+                SettingSlider(
+                    title = stringResource(R.string.overlay_opacity),
+                    valueLabel = stringResource(
+                        R.string.overlay_opacity_value,
+                        (settings.backgroundTransparency * 100).roundToInt(),
+                    ),
+                    value = settings.backgroundTransparency,
+                    valueRange = 0f..1f,
+                    steps = 99,
+                    onValueChange = {
+                        onSettingsChange(settings.copy(backgroundTransparency = it))
+                    },
+                )
+                Text(
+                    text = stringResource(R.string.overlay_effect_type),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    AttentionEffectType.values().forEach { effectType ->
+                        FilterChip(
+                            selected = settings.attentionEffectType == effectType,
+                            onClick = {
+                                onSettingsChange(settings.copy(attentionEffectType = effectType))
+                            },
+                            label = {
+                                Text(
+                                    text = stringResource(
+                                        when (effectType) {
+                                            AttentionEffectType.SHAKE -> R.string.effect_shake
+                                            AttentionEffectType.PULSE -> R.string.effect_pulse
+                                            AttentionEffectType.BOUNCE -> R.string.effect_bounce
+                                            AttentionEffectType.BLINK -> R.string.effect_blink
+                                        },
+                                    ),
+                                )
+                            },
+                        )
+                    }
+                }
+                SettingSlider(
+                    title = stringResource(R.string.overlay_effect_interval),
+                    valueLabel = stringResource(
+                        R.string.overlay_effect_interval_value,
+                        settings.attentionIntervalMinutes,
+                    ),
+                    value = settings.attentionIntervalMinutes.toFloat(),
+                    valueRange = 1f..60f,
+                    steps = 58,
+                    onValueChange = {
+                        onSettingsChange(settings.copy(attentionIntervalMinutes = it.roundToInt()))
+                    },
+                )
+                SettingSlider(
+                    title = stringResource(R.string.overlay_effect_size),
+                    valueLabel = stringResource(
+                        R.string.overlay_effect_size_value,
+                        settings.attentionEffectSizeDp.roundToInt(),
+                    ),
+                    value = settings.attentionEffectSizeDp,
+                    valueRange = 1f..12f,
+                    steps = 10,
+                    onValueChange = {
+                        onSettingsChange(settings.copy(attentionEffectSizeDp = it))
+                    },
+                )
+                OutlinedButton(
+                    onClick = { onSettingsChange(OverlayAppearanceSettings()) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text(text = stringResource(R.string.reset_overlay_appearance))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OverlayTimerPreview(settings: OverlayAppearanceSettings) {
+    var effectPreviewCount by remember { mutableStateOf(0) }
+    val shakeProgress = remember { Animatable(0f) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+
+    LaunchedEffect(effectPreviewCount) {
+        if (effectPreviewCount > 0) {
+            shakeProgress.snapTo(0f)
+            shakeProgress.animateTo(
+                targetValue = 0f,
+                animationSpec = keyframes {
+                    durationMillis = 420
+                    1f at 70
+                    -1f at 140
+                    0.65f at 210
+                    -0.65f at 280
+                    0f at 420
+                },
+            )
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.overlay_preview_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.align(Alignment.Start),
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(96.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Surface(
+                    color = Color(settings.backgroundColor).copy(
+                        alpha = 1f - settings.backgroundTransparency.coerceIn(0f, 1f),
+                    ),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.graphicsLayer {
+                        val effectPx = with(density) { settings.attentionEffectSizeDp.dp.toPx() }
+                        val progress = shakeProgress.value
+                        val strength = kotlin.math.abs(progress)
+                        when (settings.attentionEffectType) {
+                            AttentionEffectType.SHAKE -> {
+                                translationX = progress * effectPx
+                                rotationZ = progress * settings.attentionEffectSizeDp * 0.3f
+                            }
+                            AttentionEffectType.PULSE -> {
+                                val scale = 1f + strength *
+                                    (settings.attentionEffectSizeDp * 0.04f).coerceIn(0.04f, 0.4f)
+                                scaleX = scale
+                                scaleY = scale
+                            }
+                            AttentionEffectType.BOUNCE -> {
+                                translationY = -strength * effectPx
+                            }
+                            AttentionEffectType.BLINK -> {
+                                alpha = 1f - strength *
+                                    (settings.attentionEffectSizeDp * 0.12f).coerceIn(0.1f, 0.8f)
+                            }
+                        }
+                    },
+                ) {
+                    Text(
+                        text = "12:34",
+                        color = Color(settings.textColor),
+                        fontSize = settings.timeTextSizeSp.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    )
+                }
+            }
+            OutlinedButton(
+                onClick = { effectPreviewCount++ },
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Text(text = stringResource(R.string.overlay_preview_effect))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingSlider(
+    title: String,
+    valueLabel: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    onValueChange: (Float) -> Unit,
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = valueLabel,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Slider(
+            value = value.coerceIn(valueRange),
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            steps = steps,
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun OverlayColorOptions(
+    title: String,
+    selectedColor: Int,
+    options: List<OverlayColorOption>,
+    onColorSelected: (Int) -> Unit,
+) {
+    Column {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Medium,
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            options.forEach { option ->
+                Column(
+                    modifier = Modifier.clickable { onColorSelected(option.color) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color(option.color))
+                            .border(
+                                width = if (selectedColor == option.color) 3.dp else 1.dp,
+                                color = if (selectedColor == option.color) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.outlineVariant
+                                },
+                                shape = CircleShape,
+                            ),
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(text = option.label, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+    }
+}
+
+private data class OverlayColorOption(val label: String, val color: Int)
+
+private val TEXT_COLOR_OPTIONS = listOf(
+    OverlayColorOption("흰색", 0xFFFFFFFF.toInt()),
+    OverlayColorOption("검정", 0xFF111111.toInt()),
+    OverlayColorOption("노랑", 0xFFFFEB3B.toInt()),
+    OverlayColorOption("민트", 0xFF80CBC4.toInt()),
+    OverlayColorOption("분홍", 0xFFFF80AB.toInt()),
+    OverlayColorOption("하늘", 0xFF80D8FF.toInt()),
+)
+
+private val BACKGROUND_COLOR_OPTIONS = listOf(
+    OverlayColorOption("초록", 0xFF1B5E4A.toInt()),
+    OverlayColorOption("검정", 0xFF151515.toInt()),
+    OverlayColorOption("남색", 0xFF17324D.toInt()),
+    OverlayColorOption("보라", 0xFF4A235A.toInt()),
+    OverlayColorOption("빨강", 0xFF8B1E3F.toInt()),
+    OverlayColorOption("회색", 0xFF616161.toInt()),
+)
 
 @Composable
 private fun UsageAnalyticsSection(
@@ -535,13 +925,16 @@ private const val ANALYTICS_TAB = 1
 @Composable
 private fun TargetAppsSection(
     apps: List<InstalledApp>,
+    allApps: List<InstalledApp>,
     selectedApps: List<InstalledApp>,
     selectedPackages: Set<String>,
     appsLoading: Boolean,
     searchQuery: String,
     onSearchChange: (String) -> Unit,
     onToggle: (String, Boolean) -> Unit,
+    onSelectAll: (Boolean) -> Unit,
 ) {
+    val allSelected = allApps.isNotEmpty() && allApps.all { it.packageName in selectedPackages }
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -594,6 +987,31 @@ private fun TargetAppsSection(
                 },
                 shape = RoundedCornerShape(12.dp),
             )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = allApps.isNotEmpty()) { onSelectAll(!allSelected) }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.select_all_apps),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        text = stringResource(R.string.select_all_apps_summary, allApps.size),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+                Checkbox(
+                    checked = allSelected,
+                    enabled = allApps.isNotEmpty(),
+                    onCheckedChange = onSelectAll,
+                )
+            }
             Spacer(modifier = Modifier.height(12.dp))
 
             when {
@@ -632,11 +1050,13 @@ private fun SelectedAppsSummary(
     apps: List<InstalledApp>,
     onRemove: (String) -> Unit,
 ) {
+    var expanded by remember(apps) { mutableStateOf(false) }
+    val visibleApps = if (expanded) apps else apps.take(MAX_VISIBLE_SELECTED_APP_CHIPS)
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        apps.forEach { app ->
+        visibleApps.forEach { app ->
             val iconBitmap = remember(app.packageName) {
                 app.icon.toBitmap(width = 48, height = 48).asImageBitmap()
             }
@@ -669,8 +1089,28 @@ private fun SelectedAppsSummary(
                 }
             }
         }
+        val remainingCount = apps.size - MAX_VISIBLE_SELECTED_APP_CHIPS
+        if (remainingCount > 0) {
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = RoundedCornerShape(50),
+                modifier = Modifier.clickable { expanded = !expanded },
+            ) {
+                Text(
+                    text = if (expanded) {
+                        stringResource(R.string.collapse_selected_apps)
+                    } else {
+                        stringResource(R.string.more_selected_apps, remainingCount)
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+        }
     }
 }
+
+private const val MAX_VISIBLE_SELECTED_APP_CHIPS = 8
 
 @Composable
 private fun AppRow(
