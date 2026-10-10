@@ -138,6 +138,7 @@ private fun SnsTimerScreen() {
     var selectedTab by remember { mutableStateOf(0) }
     var showAppearanceSettings by remember { mutableStateOf(false) }
     var statsRefresh by remember { mutableStateOf(0) }
+    var shortVideoRefresh by remember { mutableStateOf(0) }
     var appearance by remember { mutableStateOf(appearanceStore.getSettings()) }
     var accessibilityEnabled by remember { mutableStateOf(isShortVideoAccessibilityEnabled(context)) }
 
@@ -151,6 +152,8 @@ private fun SnsTimerScreen() {
         monitoring = OverlayTimerService.isRunning()
         selectedPackages = targetStore.getSelectedPackages()
         accessibilityEnabled = isShortVideoAccessibilityEnabled(context)
+        statsRefresh++
+        shortVideoRefresh++
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -174,11 +177,9 @@ private fun SnsTimerScreen() {
     }
 
     LaunchedEffect(selectedTab) {
-        if (selectedTab == ANALYTICS_TAB) {
-            while (true) {
-                delay(1_000L)
-                statsRefresh++
-            }
+        while (true) {
+            delay(1_000L)
+            if (selectedTab == ANALYTICS_TAB) statsRefresh++ else shortVideoRefresh++
         }
     }
 
@@ -200,7 +201,7 @@ private fun SnsTimerScreen() {
     val usageReport = remember(selectedPackages, statsRefresh) {
         dailyUsageStore.getReport(selectedPackages)
     }
-    val shortVideoCounts = remember(selectedPackages, statsRefresh) {
+    val shortVideoCounts = remember(selectedPackages, shortVideoRefresh) {
         shortVideoCountStore.getTodayCounts(selectedPackages)
     }
 

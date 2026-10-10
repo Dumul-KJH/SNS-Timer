@@ -35,7 +35,7 @@ class ShortVideoCountStore(context: Context) {
     private fun countKey(packageName: String, nowMs: Long) = "count_${dayFormat.format(Date(nowMs))}_$packageName"
 
     companion object {
-        private const val DEDUPLICATION_MS = 4_000L
+        private const val DEDUPLICATION_MS = 500L
         private val dayFormat = SimpleDateFormat("yyyyMMdd", Locale.US)
     }
 }
