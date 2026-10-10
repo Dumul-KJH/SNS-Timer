@@ -51,5 +51,17 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Shows a usage-time overlay while a target SNS app is in the foreground." />
         </service>
+        <service
+            android:name=".accessibility.ShortVideoAccessibilityService"
+            android:exported="false"
+            android:label="@string/short_video_accessibility_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/short_video_accessibility_service" />
+        </service>
     </application>
 </manifest>

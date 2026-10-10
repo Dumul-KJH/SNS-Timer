@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.keyframes
 import androidx.activity.ComponentActivity
@@ -93,6 +94,7 @@ import com.snstimer.app.data.InstalledAppsRepository
 import com.snstimer.app.data.OverlayAppearanceSettings
 import com.snstimer.app.data.OverlayAppearanceStore
 import com.snstimer.app.data.TargetAppsStore
+import com.snstimer.app.data.ShortVideoCountStore
 import com.snstimer.app.overlay.OverlayTimerService
 import com.snstimer.app.permission.PermissionChecker
 import com.snstimer.app.ui.theme.SnsTimerTheme
@@ -123,6 +125,7 @@ private fun SnsTimerScreen() {
     val targetStore = remember { TargetAppsStore(context) }
     val appsRepository = remember { InstalledAppsRepository(context) }
     val dailyUsageStore = remember { DailyUsageStore(context) }
+    val shortVideoCountStore = remember { ShortVideoCountStore(context) }
     val appearanceStore = remember { OverlayAppearanceStore(context) }
 
     var overlayGranted by remember { mutableStateOf(PermissionChecker.canDrawOverlays(context)) }
@@ -136,6 +139,7 @@ private fun SnsTimerScreen() {
     var showAppearanceSettings by remember { mutableStateOf(false) }
     var statsRefresh by remember { mutableStateOf(0) }
     var appearance by remember { mutableStateOf(appearanceStore.getSettings()) }
+    var accessibilityEnabled by remember { mutableStateOf(isShortVideoAccessibilityEnabled(context)) }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -146,6 +150,7 @@ private fun SnsTimerScreen() {
         usageGranted = PermissionChecker.hasUsageStatsAccess(context)
         monitoring = OverlayTimerService.isRunning()
         selectedPackages = targetStore.getSelectedPackages()
+        accessibilityEnabled = isShortVideoAccessibilityEnabled(context)
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -194,6 +199,9 @@ private fun SnsTimerScreen() {
     }
     val usageReport = remember(selectedPackages, statsRefresh) {
         dailyUsageStore.getReport(selectedPackages)
+    }
+    val shortVideoCounts = remember(selectedPackages, statsRefresh) {
+        shortVideoCountStore.getTodayCounts(selectedPackages)
     }
 
     fun togglePackage(packageName: String, selected: Boolean) {
@@ -364,6 +372,14 @@ private fun SnsTimerScreen() {
                         },
                     )
                     Spacer(modifier = Modifier.height(12.dp))
+                    ShortVideoDetectionCard(
+                        enabled = accessibilityEnabled,
+                        todayCount = shortVideoCounts.values.sum(),
+                        onOpenSettings = {
+                            context.startActivity(android.content.Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        },
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
                     OutlinedButton(
                         onClick = { showAppearanceSettings = true },
                         modifier = Modifier.fillMaxWidth(),
@@ -393,6 +409,7 @@ private fun SnsTimerScreen() {
                     report = usageReport,
                     apps = selectedApps,
                     selectedCount = selectedPackages.size,
+                    shortVideoCounts = shortVideoCounts,
                 )
             }
         }
@@ -735,6 +752,7 @@ private fun UsageAnalyticsSection(
     report: DailyUsageReport,
     apps: List<InstalledApp>,
     selectedCount: Int,
+    shortVideoCounts: Map<String, Int>,
 ) {
     val sortedApps = remember(apps, report.apps) {
         apps.sortedByDescending { report.apps[it.packageName]?.todayMs ?: 0L }
@@ -751,6 +769,10 @@ private fun UsageAnalyticsSection(
         AnalyticsMetricCard(
             title = stringResource(R.string.analytics_today),
             value = formatUsageDuration(report.todayTotalMs),
+        )
+        AnalyticsMetricCard(
+            title = stringResource(R.string.short_video_today_count),
+            value = stringResource(R.string.short_video_count_value, shortVideoCounts.values.sum()),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             AnalyticsMetricCard(
@@ -806,6 +828,39 @@ private fun UsageAnalyticsSection(
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f),
         )
     }
+}
+
+@Composable
+private fun ShortVideoDetectionCard(enabled: Boolean, todayCount: Int, onOpenSettings: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.short_video_detection_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                text = stringResource(if (enabled) R.string.short_video_accessibility_enabled else R.string.short_video_accessibility_disabled),
+                color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(stringResource(R.string.short_video_detection_body), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.short_video_setup_steps_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.short_video_setup_step_1), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.short_video_setup_step_2), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.short_video_setup_step_3), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.short_video_count_value, todayCount), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            OutlinedButton(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.short_video_accessibility_settings))
+            }
+        }
+    }
+}
+
+private fun isShortVideoAccessibilityEnabled(context: android.content.Context): Boolean {
+    val component = "${context.packageName}/com.snstimer.app.accessibility.ShortVideoAccessibilityService"
+    val enabledServices = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+    return enabledServices?.split(':')?.any { it.equals(component, ignoreCase = true) } == true
 }
 
 @Composable
