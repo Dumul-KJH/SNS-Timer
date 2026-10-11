@@ -15,7 +15,7 @@ class ForegroundAppDetector(context: Context) {
     private val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
     private val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
     private var lastQueryTime = 0L
-    private val visibleActivities = mutableMapOf<VisibleActivity, Long>()
+    private val visibleActivities = mutableMapOf<VisibleActivity, ActivityState>()
 
     @Synchronized
     fun currentVisibleTargetPackage(targetPackages: Set<String>): String? {
@@ -36,11 +36,31 @@ class ForegroundAppDetector(context: Context) {
                     UsageEvents.Event.ACTIVITY_RESUMED -> {
                         // Keep resumed activities visible until Android reports that
                         // they stopped. PiP activities can be paused while still visible.
-                        visibleActivities[activity] = event.timeStamp
+                        val existing = visibleActivities[activity]
+                        if (existing == null || event.timeStamp > existing.resumedAt) {
+                            visibleActivities[activity] = ActivityState(
+                                resumedAt = event.timeStamp,
+                                lastPausedAt = existing?.lastPausedAt,
+                            )
+                        }
+                    }
+                    UsageEvents.Event.ACTIVITY_PAUSED -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            val existing = visibleActivities[activity]
+                            if (existing != null && event.timeStamp >= existing.resumedAt &&
+                                event.timeStamp > (existing.lastPausedAt ?: 0L)
+                            ) {
+                                visibleActivities[activity] = existing.copy(lastPausedAt = event.timeStamp)
+                            }
+                        }
                     }
                     UsageEvents.Event.ACTIVITY_STOPPED -> {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            visibleActivities.remove(activity)
+                            val existing = visibleActivities[activity]
+                            val stoppedCurrentInstance = existing == null ||
+                                event.timeStamp >= existing.resumedAt &&
+                                (existing.lastPausedAt == null || existing.lastPausedAt >= existing.resumedAt)
+                            if (stoppedCurrentInstance) visibleActivities.remove(activity)
                         }
                     }
                 }
@@ -54,12 +74,13 @@ class ForegroundAppDetector(context: Context) {
         return visibleActivities.entries
             .asSequence()
             .filter { it.key.packageName in targetPackages }
-            .maxByOrNull { it.value }
+            .maxByOrNull { it.value.resumedAt }
             ?.key
             ?.packageName
     }
 
     private data class VisibleActivity(val packageName: String, val className: String)
+    private data class ActivityState(val resumedAt: Long, val lastPausedAt: Long?)
 
     companion object {
         private const val INITIAL_LOOKBACK_MS = 24 * 60 * 60 * 1000L

@@ -15,6 +15,16 @@ class ShortVideoCountStore(context: Context) {
         prefs.getInt(countKey(packageName, nowMs), 0)
 
     @Synchronized
+    fun setActiveShortVideoPackage(packageName: String?) {
+        if (prefs.getString(KEY_ACTIVE_PACKAGE, null) != packageName) {
+            prefs.edit { putString(KEY_ACTIVE_PACKAGE, packageName) }
+        }
+    }
+
+    fun isShortVideoActive(packageName: String): Boolean =
+        prefs.getString(KEY_ACTIVE_PACKAGE, null) == packageName
+
+    @Synchronized
     fun recordEstimatedVideo(packageName: String, signature: String, nowMs: Long = System.currentTimeMillis()): Boolean {
         val key = countKey(packageName, nowMs)
         val signatureHash = signature.hashCode()
@@ -35,7 +45,8 @@ class ShortVideoCountStore(context: Context) {
     private fun countKey(packageName: String, nowMs: Long) = "count_${dayFormat.format(Date(nowMs))}_$packageName"
 
     companion object {
-        private const val DEDUPLICATION_MS = 500L
+        private const val KEY_ACTIVE_PACKAGE = "active_short_video_package"
+        private const val DEDUPLICATION_MS = 250L
         private val dayFormat = SimpleDateFormat("yyyyMMdd", Locale.US)
     }
 }

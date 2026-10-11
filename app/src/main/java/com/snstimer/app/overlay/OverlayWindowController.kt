@@ -13,6 +13,7 @@ import android.view.animation.LinearInterpolator
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.LinearLayout
 import android.widget.TextView
 import com.snstimer.app.R
 import com.snstimer.app.data.AttentionEffectType
@@ -24,7 +25,9 @@ import com.snstimer.app.data.OverlayAppearanceSettings
 class OverlayWindowController(private val context: Context) {
 
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-    private var overlayView: TextView? = null
+    private var overlayView: LinearLayout? = null
+    private var elapsedView: TextView? = null
+    private var reelsCountView: TextView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private var attentionAnimator: AnimatorSet? = null
     private var lastTenMinuteMark: Long? = null
@@ -43,15 +46,28 @@ class OverlayWindowController(private val context: Context) {
         val paddingH = (16 * density).toInt()
         val paddingV = (10 * density).toInt()
 
-        val view = TextView(context).apply {
+        val elapsedView = TextView(context).apply {
             text = formatElapsed(0L)
             setTextColor(settings.textColor)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, settings.timeTextSizeSp)
             typeface = Typeface.MONOSPACE
+        }
+        val reelsCountView = TextView(context).apply {
+            setTextColor(settings.textColor)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, settings.timeTextSizeSp * REELS_COUNT_TEXT_SCALE)
+            visibility = View.GONE
+        }
+        val view = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             setPadding(paddingH, paddingV, paddingH, paddingV)
             background = createBackground(settings)
             elevation = 8 * density
             contentDescription = context.getString(R.string.overlay_timer_content_description)
+            addView(elapsedView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            addView(reelsCountView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = (REELS_COUNT_GAP_DP * density).toInt()
+            })
         }
 
         val params = WindowManager.LayoutParams(
@@ -75,19 +91,42 @@ class OverlayWindowController(private val context: Context) {
         enableDragging(view, params)
         windowManager.addView(view, params)
         overlayView = view
+        this.elapsedView = elapsedView
+        this.reelsCountView = reelsCountView
         layoutParams = params
         appliedSettings = settings
     }
 
-    fun updateElapsed(elapsedMs: Long, settings: OverlayAppearanceSettings) {
+    fun updateElapsed(
+        elapsedMs: Long,
+        settings: OverlayAppearanceSettings,
+        shortVideoLabel: String? = null,
+    ) {
         val view = overlayView ?: return
+        val timerText = elapsedView ?: return
+        val reelsText = reelsCountView ?: return
         if (appliedSettings != settings) {
-            view.setTextSize(TypedValue.COMPLEX_UNIT_SP, settings.timeTextSizeSp)
-            view.setTextColor(settings.textColor)
+            timerText.setTextSize(TypedValue.COMPLEX_UNIT_SP, settings.timeTextSizeSp)
+            timerText.setTextColor(settings.textColor)
+            reelsText.setTextSize(TypedValue.COMPLEX_UNIT_SP, settings.timeTextSizeSp * REELS_COUNT_TEXT_SCALE)
+            reelsText.setTextColor(settings.textColor)
             view.background = createBackground(settings)
             appliedSettings = settings
         }
-        view.text = formatElapsed(elapsedMs)
+        val formattedElapsed = formatElapsed(elapsedMs)
+        if (timerText.text != formattedElapsed) timerText.text = formattedElapsed
+        if (shortVideoLabel != null) {
+            reelsText.visibility = View.VISIBLE
+            if (reelsText.text != shortVideoLabel) reelsText.text = shortVideoLabel
+            val contentDescription = context.getString(
+                R.string.overlay_timer_with_short_video_content_description, formattedElapsed, shortVideoLabel,
+            )
+            if (view.contentDescription != contentDescription) view.contentDescription = contentDescription
+        } else {
+            reelsText.visibility = View.GONE
+            val contentDescription = context.getString(R.string.overlay_timer_content_description)
+            if (view.contentDescription != contentDescription) view.contentDescription = contentDescription
+        }
 
         val intervalMs = settings.attentionIntervalMinutes * MINUTE_MS
         val intervalMark = elapsedMs / intervalMs
@@ -114,6 +153,8 @@ class OverlayWindowController(private val context: Context) {
         val view = overlayView ?: return
         runCatching { windowManager.removeView(view) }
         overlayView = null
+        elapsedView = null
+        reelsCountView = null
         layoutParams = null
     }
 
@@ -251,6 +292,8 @@ class OverlayWindowController(private val context: Context) {
         private const val SCALE_PER_DP = 0.04f
         private const val BLINK_PER_DP = 0.12f
         private const val CORNER_RADIUS_DP = 20f
+        private const val REELS_COUNT_GAP_DP = 8f
+        private const val REELS_COUNT_TEXT_SCALE = 0.72f
 
         fun formatElapsed(elapsedMs: Long): String {
             val totalSeconds = (elapsedMs / 1000L).coerceAtLeast(0L)

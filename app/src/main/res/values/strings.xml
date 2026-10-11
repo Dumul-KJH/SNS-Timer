@@ -82,4 +82,8 @@
     <string name="short_video_accessibility_settings">접근성 설정 열기</string>
     <string name="short_video_today_count">오늘 짧은 동영상 추정 시청 수</string>
     <string name="short_video_count_value">%d개</string>
+    <string name="overlay_reels_count">릴스 %1$d개</string>
+    <string name="overlay_tiktok_count">TikTok %1$d개</string>
+    <string name="overlay_shorts_count">쇼츠 %1$d개</string>
+    <string name="overlay_timer_with_short_video_content_description">사용 시간 %1$s, 오늘 본 짧은 동영상: %2$s</string>
 </resources>

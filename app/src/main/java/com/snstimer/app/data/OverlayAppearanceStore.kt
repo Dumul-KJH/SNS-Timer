@@ -15,11 +15,11 @@ enum class AttentionEffectType {
 data class OverlayAppearanceSettings(
     val timeTextSizeSp: Float = 16f,
     val textColor: Int = Color.WHITE,
-    val backgroundColor: Int = 0xFF1B5E4A.toInt(),
-    val backgroundTransparency: Float = 0.2f,
-    val attentionIntervalMinutes: Int = 10,
-    val attentionEffectSizeDp: Float = 4f,
-    val attentionEffectType: AttentionEffectType = AttentionEffectType.SHAKE,
+    val backgroundColor: Int = Color.GRAY,
+    val backgroundTransparency: Float = 0.5f,
+    val attentionIntervalMinutes: Int = 5,
+    val attentionEffectSizeDp: Float = 8f,
+    val attentionEffectType: AttentionEffectType = AttentionEffectType.PULSE,
 )
 
 class OverlayAppearanceStore(context: Context) {
@@ -29,20 +29,20 @@ class OverlayAppearanceStore(context: Context) {
 
     fun getSettings(): OverlayAppearanceSettings {
         val transparency = if (prefs.contains(KEY_BACKGROUND_TRANSPARENCY)) {
-            prefs.getFloat(KEY_BACKGROUND_TRANSPARENCY, 0.2f)
+            prefs.getFloat(KEY_BACKGROUND_TRANSPARENCY, 0.5f)
         } else {
-            1f - prefs.getFloat(KEY_LEGACY_BACKGROUND_OPACITY, 0.8f)
+            1f - prefs.getFloat(KEY_LEGACY_BACKGROUND_OPACITY, 0.5f)
         }
         return OverlayAppearanceSettings(
             timeTextSizeSp = prefs.getFloat(KEY_TEXT_SIZE, 16f),
             textColor = prefs.getInt(KEY_TEXT_COLOR, Color.WHITE),
-            backgroundColor = prefs.getInt(KEY_BACKGROUND_COLOR, 0xFF1B5E4A.toInt()),
+            backgroundColor = prefs.getInt(KEY_BACKGROUND_COLOR, Color.GRAY),
             backgroundTransparency = transparency.coerceIn(0f, 1f),
-            attentionIntervalMinutes = prefs.getInt(KEY_ATTENTION_INTERVAL, 10),
-            attentionEffectSizeDp = prefs.getFloat(KEY_ATTENTION_SIZE, 4f),
+            attentionIntervalMinutes = prefs.getInt(KEY_ATTENTION_INTERVAL, 5),
+            attentionEffectSizeDp = prefs.getFloat(KEY_ATTENTION_SIZE, 8f),
             attentionEffectType = prefs.getString(KEY_ATTENTION_TYPE, null)
                 ?.let { saved -> AttentionEffectType.values().firstOrNull { it.name == saved } }
-                ?: AttentionEffectType.SHAKE,
+                ?: AttentionEffectType.PULSE,
         )
     }
 
